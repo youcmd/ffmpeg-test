@@ -2,6 +2,12 @@ name: Build and Release FFmpeg Static
 
 on:
   workflow_dispatch:
+    inputs:
+        release:
+          description: 'Create GitHub Release and upload asset'
+          required: true
+          default: false
+          type: boolean
 
 permissions:
   contents: write
@@ -83,6 +89,7 @@ jobs:
         path: ffmpeg-custom-linux-x86_64.tar.gz
 
     - name: Create GitHub Release & Upload Asset
+      if: inputs.release == true
       uses: softprops/action-gh-release@v3
       with:
         tag_name: ffmpeg-${{ steps.build-ffmpeg.outputs.date }}-${{ steps.build-ffmpeg.outputs.commit }}
