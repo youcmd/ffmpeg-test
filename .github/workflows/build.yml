@@ -1,8 +1,6 @@
 name: Build and Release FFmpeg Static
 
 on:
-  push:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 permissions:
