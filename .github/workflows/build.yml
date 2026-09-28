@@ -83,7 +83,7 @@ jobs:
         path: ffmpeg-custom-linux-x86_64.tar.gz
 
     - name: Create GitHub Release & Upload Asset
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ffmpeg-${{ steps.build-ffmpeg.outputs.date }}-${{ steps.build-ffmpeg.outputs.commit }}
         name: FFmpeg Custom Build (${{ steps.build-ffmpeg.outputs.commit }})
