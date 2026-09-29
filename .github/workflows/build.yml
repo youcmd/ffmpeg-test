@@ -28,7 +28,7 @@ jobs:
         DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
             git build-essential yasm nasm pkg-config meson ninja-build \
             libwavpack-dev libbz2-dev zlib1g-dev \
-            libx264-dev libvpx-dev libopus-dev
+            libx264-dev libvpx-dev libopus-dev libsoxr-dev
 
         pip install --upgrade meson
 
@@ -64,6 +64,7 @@ jobs:
             --enable-libvpx \
             --enable-libopus \
             --enable-libdav1d \
+            --enable-libsoxr \
             --disable-doc \
             --disable-ffplay \
             --disable-ffprobe \
@@ -100,7 +101,7 @@ jobs:
           Automated static build of FFmpeg (`aac_improv2` branch).
           - **Commit:** `${{ steps.build-ffmpeg.outputs.commit }}`
           - **Date:** `${{ steps.build-ffmpeg.outputs.date }}`
-          - **Linked Libraries:** x264, vpx, opus, dav1d (Static)
+          - **Linked Libraries:** x264, vpx, opus, dav1d, soxr (Static)
         files: ffmpeg-custom-linux-x86_64.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
