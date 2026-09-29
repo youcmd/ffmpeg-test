@@ -12,6 +12,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -58,6 +62,10 @@ jobs:
           echo
           echo "==> AAC encoder"
           ~/ffmpeg-custom/bin/ffmpeg -h encoder=aac
+
+          echo
+          echo "==> SoXR"
+          ~/ffmpeg-custom/bin/ffmpeg -filters | grep -i soxr || true
 
           echo
           echo "==> Binary information"
