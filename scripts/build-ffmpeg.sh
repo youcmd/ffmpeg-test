@@ -59,6 +59,8 @@ git clone \
 
 cd ffmpeg
 
+COMMIT=$(git rev-parse --short HEAD)
+
 ./configure \
   --prefix="$PREFIX" \
   --pkg-config-flags="--static" \
@@ -84,3 +86,7 @@ make -j"$(nproc)"
 make install
 
 strip "$PREFIX/bin/ffmpeg"
+
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+fi
