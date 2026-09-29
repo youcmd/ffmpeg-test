@@ -8,14 +8,22 @@ WORKDIR="$HOME/ffmpeg-build"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 
 rm -rf "$WORKDIR"
-mkdir -p "$WORKDIR" "$PREFIX"
+rm -rf "$PREFIX"
+
+mkdir -p "$WORKDIR"
+mkdir -p "$PREFIX"
+
 cd "$WORKDIR"
 
+# ============================================================
 # dav1d
+# ============================================================
+
 echo "==> Building dav1d"
 
 git clone --depth 1 \
-  https://code.videolan.org/videolan/dav1d.git dav1d
+  https://code.videolan.org/videolan/dav1d.git \
+  dav1d
 
 meson setup dav1d/build dav1d \
   --prefix="$PREFIX" \
@@ -26,34 +34,69 @@ meson setup dav1d/build dav1d \
 ninja -C dav1d/build
 ninja -C dav1d/build install
 
+
+# ============================================================
 # soxr
+# ============================================================
+
 echo "==> Building soxr"
 
-git clone https://git.code.sf.net/p/soxr/code soxr
+git clone \
+  https://git.code.sf.net/p/soxr/code \
+  soxr
+
 cd soxr
 
-git checkout 945b592b70470e29f917f4de89b4281fbbd540c0
-
+# Fix newer CMake
 sed -i 's/VERSION 3.1 /VERSION 3.1...3.10 /' CMakeLists.txt
+
+# Fix non-Windows configuration
 sed -i 's/NOT WIN32/1/' src/CMakeLists.txt
 
 cmake -S . -B build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_INSTALL_LIBDIR=lib \
-  -DWITH_OPENMP=ON \
+  -DWITH_OPENMP=OFF \
   -DBUILD_TESTS=OFF \
   -DBUILD_EXAMPLES=OFF \
   -DBUILD_SHARED_LIBS=OFF
 
 cmake --build build --parallel "$(nproc)"
-cmake --install build
 
-echo "Libs.private: -lgomp" >> "$PREFIX/lib/pkgconfig/soxr.pc"
+cmake --install build
 
 cd "$WORKDIR"
 
+
+# ============================================================
+# Check soxr
+# ============================================================
+
+echo "==> Checking soxr"
+
+test -f "$PREFIX/include/soxr.h"
+test -f "$PREFIX/lib/libsoxr.a"
+test -f "$PREFIX/lib/pkgconfig/soxr.pc"
+
+echo "soxr library:"
+ls -lh "$PREFIX/lib/libsoxr.a"
+
+echo
+echo "soxr pkg-config:"
+cat "$PREFIX/lib/pkgconfig/soxr.pc"
+
+echo
+echo "pkg-config:"
+pkg-config --cflags soxr
+pkg-config --libs soxr
+pkg-config --static --libs soxr
+
+
+# ============================================================
 # FFmpeg
+# ============================================================
+
 echo "==> Building FFmpeg"
 
 git clone \
@@ -86,14 +129,31 @@ DATE=$(git log -1 --format=%cd --date=format:%Y%m%d)
   --extra-ldflags="-L$PREFIX/lib -static -pthread"
 
 make -j"$(nproc)"
+
 make install
 
-# GitHub Actions
+
+# ============================================================
+# GitHub Actions outputs
+# ============================================================
+
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
   echo "date=$DATE" >> "$GITHUB_OUTPUT"
 fi
 
+
+# ============================================================
+# Done
+# ============================================================
+
 echo
-echo "Done!"
+echo "========================================"
+echo "Build complete!"
+echo "========================================"
+echo
+echo "FFmpeg:"
 echo "$PREFIX/bin/ffmpeg"
+echo
+echo "Version:"
+"$PREFIX/bin/ffmpeg" -version | head -n 1
