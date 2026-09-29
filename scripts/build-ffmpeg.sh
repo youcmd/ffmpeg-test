@@ -97,7 +97,23 @@ cat > /tmp/test-soxr.c <<'EOF'
 
 int main(void)
 {
-    soxr_create(48000, 44100, 2, 0, 0, 0);
+    soxr_error_t error = 0;
+
+    soxr_t soxr = soxr_create(
+        48000,
+        44100,
+        2,
+        &error,
+        NULL,
+        NULL,
+        NULL
+    );
+
+    if (soxr == NULL)
+        return 1;
+
+    soxr_delete(soxr);
+
     return 0;
 }
 EOF
@@ -148,6 +164,7 @@ DATE=$(git log -1 --format=%cd --date=format:%Y%m%d)
   --extra-cflags="-I$PREFIX/include" \
   --extra-ldflags="-L$PREFIX/lib" \
   --extra-libs="-lsoxr -lm -pthread"
+
 
 make -j"$(nproc)"
 
