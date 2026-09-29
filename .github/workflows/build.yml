@@ -84,7 +84,7 @@ jobs:
         if: inputs.release == true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ffmpeg-${{ steps.build-ffmpeg.outputs.date }}-${{ steps.build-ffmpeg.outputs.commit }}
+          tag_name: ${{ steps.commit.outputs.date }}-${{ steps.commit.outputs.commit }}
           name: FFmpeg Custom Build (${{ steps.build-ffmpeg.outputs.commit }})
           body: |
             Automated static build of FFmpeg (`aac_improv2`).
