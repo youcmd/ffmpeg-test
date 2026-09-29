@@ -59,9 +59,6 @@ git clone \
 
 cd ffmpeg
 
-COMMIT=$(git rev-parse --short HEAD)
-DATE=$(git log -1 --format=%cd --date=format:%Y%m%d)
-
 ./configure \
   --prefix="$PREFIX" \
   --pkg-config-flags="--static" \
@@ -87,8 +84,3 @@ make -j"$(nproc)"
 make install
 
 strip "$PREFIX/bin/ffmpeg"
-
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-  echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-  echo "date=$DATE" >> "$GITHUB_OUTPUT"
-fi
