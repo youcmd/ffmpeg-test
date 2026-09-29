@@ -2,10 +2,6 @@
 
 set -euo pipefail
 
-# ============================================================
-# Configuration
-# ============================================================
-
 PREFIX="$HOME/ffmpeg-custom"
 WORKDIR="$HOME/ffmpeg-build"
 
@@ -13,248 +9,77 @@ FFMPEG_REPO="https://code.ffmpeg.org/Lynne/FFmpeg.git"
 FFMPEG_BRANCH="aac_improv2"
 
 DAV1D_REPO="https://code.videolan.org/videolan/dav1d.git"
-SOXR_REPO="https://github.com/chirlu/soxr.git"
 
-export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+SOXR_REPO="https://git.code.sf.net/p/soxr/code"
+SOXR_COMMIT="945b592b70470e29f917f4de89b4281fbbd540c0"
 
-# ============================================================
-# Helper functions
-# ============================================================
-
-die()
-{
-    echo
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
-section()
-{
-    echo
-    echo "============================================================"
-    echo "$1"
-    echo "============================================================"
-}
-
-# ============================================================
-# Start
-# ============================================================
-
-section "FFmpeg Static Build"
-
-echo "PREFIX  : $PREFIX"
-echo "WORKDIR : $WORKDIR"
-echo "FFmpeg  : $FFMPEG_BRANCH"
-
-echo
-echo "PKG_CONFIG_PATH:"
-echo "$PKG_CONFIG_PATH"
-
-# ============================================================
-# Clean build directory
-# ============================================================
-
-section "Preparing Build Directory"
+export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
 
 rm -rf "$WORKDIR"
-mkdir -p "$WORKDIR"
-mkdir -p "$PREFIX"
+mkdir -p "$WORKDIR" "$PREFIX"
 
 cd "$WORKDIR"
 
 # ============================================================
-# Build dav1d
+# dav1d
 # ============================================================
 
-section "Building dav1d"
+echo "==> Building dav1d"
 
-git clone \
-    --depth 1 \
-    "$DAV1D_REPO" \
-    dav1d
-
+git clone --depth 1 "$DAV1D_REPO" dav1d
 cd dav1d
 
-mkdir build
-cd build
-
-meson setup .. \
+meson setup build \
     --prefix="$PREFIX" \
-    --libdir="$PREFIX/lib" \
+    --libdir=lib \
     -Ddefault_library=static \
     --buildtype=release
 
-ninja
-ninja install
+ninja -C build
+ninja -C build install
 
 cd "$WORKDIR"
 
-echo
-echo "dav1d installed."
-
-echo
-echo "dav1d files:"
-find "$PREFIX" -type f | grep -E 'dav1d|pkgconfig' || true
-
 # ============================================================
-# Build soxr
+# soxr
 # ============================================================
 
-section "Building soxr"
+echo "==> Building soxr"
 
-git clone \
-    --depth 1 \
-    "$SOXR_REPO" \
-    soxr
-
+git clone "$SOXR_REPO" soxr
 cd soxr
+
+git checkout "$SOXR_COMMIT"
+
+# Patches from FFmpeg's build recipe
+sed -i 's/VERSION 3.1 /VERSION 3.1...3.10 /g' CMakeLists.txt
+sed -i 's/NOT WIN32/1/g' src/CMakeLists.txt
 
 mkdir build
 cd build
 
-cmake \
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-    -DCMAKE_INSTALL_LIBDIR="lib" \
-    -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DWITH_OPENMP=ON \
     -DBUILD_TESTS=OFF \
     -DBUILD_EXAMPLES=OFF \
-    -DWITH_OPENMP=OFF \
-    -DCMAKE_BUILD_TYPE=Release \
-    ..
+    -DBUILD_SHARED_LIBS=OFF
 
-cmake --build . --parallel "$(nproc)"
-cmake --install .
+make -j"$(nproc)"
+make install
+
+# Add OpenMP dependency for static linking
+echo "Libs.private: -lgomp" >> "$PREFIX/lib/pkgconfig/soxr.pc"
 
 cd "$WORKDIR"
 
 # ============================================================
-# Verify soxr installation
+# FFmpeg
 # ============================================================
 
-section "Checking soxr"
-
-echo "==> Installed soxr files"
-
-find "$PREFIX" -type f \
-    \( \
-        -name 'libsoxr*' \
-        -o -name 'soxr.h' \
-        -o -name 'soxr.pc' \
-        -o -name 'soxr-lsr.pc' \
-    \) \
-    -print
-
-# ------------------------------------------------------------
-# Check static library
-# ------------------------------------------------------------
-
-echo
-echo "==> Checking libsoxr.a"
-
-if [[ ! -f "$PREFIX/lib/libsoxr.a" ]]; then
-    die "libsoxr.a was not installed"
-fi
-
-ls -lh "$PREFIX/lib/libsoxr.a"
-
-# ------------------------------------------------------------
-# Check header
-# ------------------------------------------------------------
-
-echo
-echo "==> Checking soxr.h"
-
-if [[ ! -f "$PREFIX/include/soxr.h" ]]; then
-    die "soxr.h was not installed"
-fi
-
-ls -lh "$PREFIX/include/soxr.h"
-
-# ------------------------------------------------------------
-# Check pkg-config
-# ------------------------------------------------------------
-
-echo
-echo "==> Checking soxr.pc"
-
-if [[ ! -f "$PREFIX/lib/pkgconfig/soxr.pc" ]]; then
-    die "soxr.pc was not installed"
-fi
-
-cat "$PREFIX/lib/pkgconfig/soxr.pc"
-
-echo
-echo "==> pkg-config version"
-
-pkg-config --modversion soxr
-
-echo
-echo "==> pkg-config cflags"
-
-pkg-config --cflags soxr
-
-echo
-echo "==> pkg-config static libs"
-
-pkg-config --libs --static soxr
-
-# ============================================================
-# Direct soxr compiler/linker test
-# ============================================================
-
-section "Direct soxr Compiler/Linker Test"
-
-cat > /tmp/test-soxr.c <<'EOF'
-#include <soxr.h>
-
-int main(void)
-{
-    soxr_error_t error = NULL;
-
-    soxr_t soxr = soxr_create(
-        48000,
-        44100,
-        2,
-        &error,
-        NULL,
-        NULL,
-        NULL
-    );
-
-    if (soxr)
-        soxr_delete(soxr);
-
-    return error != NULL;
-}
-EOF
-
-echo "Source:"
-cat /tmp/test-soxr.c
-
-echo
-echo "Compiler:"
-cc --version | head -n 1
-
-echo
-echo "Compile/link command:"
-echo "cc -I$PREFIX/include /tmp/test-soxr.c -L$PREFIX/lib -lsoxr -lm -o /tmp/test-soxr"
-
-cc \
-    -I"$PREFIX/include" \
-    /tmp/test-soxr.c \
-    -L"$PREFIX/lib" \
-    -lsoxr \
-    -lm \
-    -o /tmp/test-soxr
-
-echo
-echo "SUCCESS: direct soxr compile/link test passed."
-
-# ============================================================
-# Clone FFmpeg
-# ============================================================
-
-section "Building FFmpeg"
+echo "==> Building FFmpeg"
 
 git clone \
     --branch "$FFMPEG_BRANCH" \
@@ -262,52 +87,6 @@ git clone \
     ffmpeg
 
 cd ffmpeg
-
-COMMIT=$(git rev-parse --short HEAD)
-DATE=$(git log -1 --format=%cd --date=format:'%Y%m%d')
-
-echo
-echo "FFmpeg commit : $COMMIT"
-echo "FFmpeg date   : $DATE"
-
-# ============================================================
-# FFmpeg environment
-# ============================================================
-
-section "FFmpeg Build Environment"
-
-echo "PREFIX:"
-echo "$PREFIX"
-
-echo
-echo "PKG_CONFIG_PATH:"
-echo "$PKG_CONFIG_PATH"
-
-echo
-echo "soxr pkg-config:"
-pkg-config --modversion soxr
-pkg-config --cflags soxr
-pkg-config --libs --static soxr
-
-echo
-echo "Compiler:"
-cc --version | head -n 1
-
-echo
-echo "Library:"
-ls -lh "$PREFIX/lib/libsoxr.a"
-
-echo
-echo "Header:"
-ls -lh "$PREFIX/include/soxr.h"
-
-# ============================================================
-# FFmpeg configure
-# ============================================================
-
-section "Running FFmpeg configure"
-
-set +e
 
 ./configure \
     --prefix="$PREFIX" \
@@ -326,109 +105,22 @@ set +e
     --enable-libdav1d \
     --enable-libsoxr \
     --extra-cflags="-I$PREFIX/include" \
-    --extra-ldflags="-L$PREFIX/lib -static"
-
-CONFIGURE_STATUS=$?
-
-set -e
-
-# ============================================================
-# Dump configure log on failure
-# ============================================================
-
-if [[ $CONFIGURE_STATUS -ne 0 ]]; then
-
-    echo
-    echo "============================================================"
-    echo "FFmpeg configure FAILED"
-    echo "============================================================"
-
-    echo
-    echo "==> libsoxr references in config.log"
-
-    grep -n -i -C 20 "soxr" \
-        ffbuild/config.log \
-        || true
-
-    echo
-    echo "==> soxr_create references in config.log"
-
-    grep -n -i -C 20 "soxr_create" \
-        ffbuild/config.log \
-        || true
-
-    echo
-    echo "==> Last 150 lines of config.log"
-
-    tail -n 150 ffbuild/config.log
-
-    exit "$CONFIGURE_STATUS"
-fi
-
-echo
-echo "FFmpeg configure succeeded."
-
-# ============================================================
-# Build FFmpeg
-# ============================================================
-
-section "Compiling FFmpeg"
+    --extra-ldflags="-L$PREFIX/lib -static -pthread"
 
 make -j"$(nproc)"
-
-# ============================================================
-# Install FFmpeg
-# ============================================================
-
-section "Installing FFmpeg"
-
 make install
-
-# ============================================================
-# Final verification
-# ============================================================
-
-section "Final Build"
-
-if [[ ! -x "$PREFIX/bin/ffmpeg" ]]; then
-    die "FFmpeg binary was not installed"
-fi
-
-echo
-echo "FFmpeg binary:"
-ls -lh "$PREFIX/bin/ffmpeg"
-
-echo
-echo "FFmpeg version:"
-"$PREFIX/bin/ffmpeg" -version | head -n 5
-
-# ============================================================
-# GitHub Actions outputs
-# ============================================================
-
-if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-    echo "date=$DATE" >> "$GITHUB_OUTPUT"
-fi
 
 # ============================================================
 # Done
 # ============================================================
 
-section "BUILD COMPLETE"
-
+echo
+echo "========================================"
+echo "BUILD COMPLETE"
+echo "========================================"
 echo
 echo "FFmpeg:"
 echo "$PREFIX/bin/ffmpeg"
-
 echo
-echo "Commit:"
-echo "$COMMIT"
-
-echo
-echo "Date:"
-echo "$DATE"
-
-echo
-echo "Static libraries:"
-find "$PREFIX/lib" -maxdepth 1 -type f -name '*.a' -printf '%f\n' | sort
+echo "Version:"
+"$PREFIX/bin/ffmpeg" -version | head -n 1
