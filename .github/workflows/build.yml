@@ -34,7 +34,7 @@ jobs:
 
       - name: Build FFmpeg
         id: build-ffmpeg
-        run: ./scripts/build-ffmpeg.sh
+        run: bash scripts/build-ffmpeg.sh
 
       - name: Verify
         run: |
