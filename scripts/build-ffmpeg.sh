@@ -16,7 +16,7 @@ mkdir -p "$PREFIX"
 cd "$WORKDIR"
 
 # ============================================================
-# dav1d
+# Build dav1d
 # ============================================================
 
 echo "==> Building dav1d"
@@ -36,7 +36,7 @@ ninja -C dav1d/build install
 
 
 # ============================================================
-# soxr
+# Build SoXR
 # ============================================================
 
 echo "==> Building soxr"
@@ -47,30 +47,27 @@ git clone \
 
 cd soxr
 
-# Fix newer CMake
-sed -i 's/VERSION 3.1 /VERSION 3.1...3.10 /' CMakeLists.txt
+git checkout 945b592b70470e29f917f4de89b4281fbbd540c0
 
-# Fix non-Windows configuration
+sed -i 's/VERSION 3.1 /VERSION 3.1...3.10 /' CMakeLists.txt
 sed -i 's/NOT WIN32/1/' src/CMakeLists.txt
 
 cmake -S . -B build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-  -DCMAKE_INSTALL_LIBDIR=lib \
   -DWITH_OPENMP=OFF \
   -DBUILD_TESTS=OFF \
   -DBUILD_EXAMPLES=OFF \
   -DBUILD_SHARED_LIBS=OFF
 
 cmake --build build --parallel "$(nproc)"
-
 cmake --install build
 
 cd "$WORKDIR"
 
 
 # ============================================================
-# Check soxr
+# Verify SoXR
 # ============================================================
 
 echo "==> Checking soxr"
@@ -79,22 +76,45 @@ test -f "$PREFIX/include/soxr.h"
 test -f "$PREFIX/lib/libsoxr.a"
 test -f "$PREFIX/lib/pkgconfig/soxr.pc"
 
-echo "soxr library:"
-ls -lh "$PREFIX/lib/libsoxr.a"
-
-echo
-echo "soxr pkg-config:"
+echo "==> soxr.pc"
 cat "$PREFIX/lib/pkgconfig/soxr.pc"
 
 echo
-echo "pkg-config:"
+echo "==> pkg-config"
 pkg-config --cflags soxr
 pkg-config --libs soxr
 pkg-config --static --libs soxr
 
 
 # ============================================================
-# FFmpeg
+# Direct SoXR linker test
+# ============================================================
+
+echo "==> Testing libsoxr"
+
+cat > /tmp/test-soxr.c <<'EOF'
+#include <soxr.h>
+
+int main(void)
+{
+    soxr_create(48000, 44100, 2, 0, 0, 0);
+    return 0;
+}
+EOF
+
+cc \
+  -I"$PREFIX/include" \
+  /tmp/test-soxr.c \
+  -L"$PREFIX/lib" \
+  -lsoxr \
+  -lm \
+  -o /tmp/test-soxr
+
+echo "==> libsoxr link test passed"
+
+
+# ============================================================
+# Build FFmpeg
 # ============================================================
 
 echo "==> Building FFmpeg"
@@ -126,7 +146,8 @@ DATE=$(git log -1 --format=%cd --date=format:%Y%m%d)
   --enable-libdav1d \
   --enable-libsoxr \
   --extra-cflags="-I$PREFIX/include" \
-  --extra-ldflags="-L$PREFIX/lib -static -pthread"
+  --extra-ldflags="-L$PREFIX/lib" \
+  --extra-libs="-lsoxr -lm -pthread"
 
 make -j"$(nproc)"
 
