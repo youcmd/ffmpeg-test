@@ -2,14 +2,15 @@ name: Build and Release FFmpeg Static
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: ["main", "master"]
+
   workflow_dispatch:
     inputs:
-        release:
-          description: 'Create GitHub Release and upload asset'
-          required: true
-          default: false
-          type: boolean
+      release:
+        description: "Create GitHub Release and upload asset"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -19,98 +20,50 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Install Build Dependencies
-      run: |
-        sudo apt-get update -qq
-        DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
-            git build-essential yasm nasm pkg-config meson ninja-build \
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            git build-essential yasm nasm pkg-config \
+            meson ninja-build cmake \
             libwavpack-dev libbz2-dev zlib1g-dev \
             libx264-dev libvpx-dev libopus-dev
+          pip install --upgrade meson
 
-        pip install --upgrade meson
+      - name: Build FFmpeg
+        id: build-ffmpeg
+        run: ./scripts/build-ffmpeg.sh
 
-    - name: Build dav1d (Static)
-      run: |
-        git clone --depth 1 https://code.videolan.org/videolan/dav1d.git dav1d-build
-        cd dav1d-build
-        mkdir build && cd build
-        meson setup .. --prefix="$HOME/ffmpeg-custom" --libdir="$HOME/ffmpeg-custom/lib" -Ddefault_library=static --buildtype=release
-        ninja && ninja install
-        cd ~
-        
-    - name: Build soxr (Static)
-      run: |
-        git clone --depth 1 https://github.com/chirlu/soxr.git soxr-build
-        cd soxr-build
-        mkdir build && cd build
-        cmake -DCMAKE_INSTALL_PREFIX="$HOME/ffmpeg-custom" -DCMAKE_INSTALL_LIBDIR="lib" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release ..
-        make -j$(nproc)
-        make install
-        cd ~
-        
-    - name: Clone and Build FFmpeg
-      id: build-ffmpeg
-      run: |
-        git clone --branch aac_improv2 https://code.ffmpeg.org/Lynne/FFmpeg.git ffmpeg-aac-improv
-        cd ffmpeg-aac-improv
+      - name: Verify
+        run: |
+          ~/ffmpeg-custom/bin/ffmpeg -version
+          ~/ffmpeg-custom/bin/ffmpeg -h encoder=aac
 
-        # Capture commit hash and date cleanly
-        COMMIT=$(git rev-parse --short HEAD)
-        DATE=$(git log -1 --format=%cd --date=format:'%Y%m%d')
+      - name: Archive
+        run: |
+          tar -czf ffmpeg-custom-linux-x86_64.tar.gz \
+            -C "$HOME" ffmpeg-custom
 
-        echo "commit=$COMMIT" >> $GITHUB_OUTPUT
-        echo "date=$DATE" >> $GITHUB_OUTPUT
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-custom-static
+          path: ffmpeg-custom-linux-x86_64.tar.gz
 
-        export PKG_CONFIG_PATH="$HOME/ffmpeg-custom/lib/pkgconfig"
+      - name: Release
+        if: inputs.release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ffmpeg-${{ steps.build-ffmpeg.outputs.date }}-${{ steps.build-ffmpeg.outputs.commit }}
+          name: FFmpeg Custom Build (${{ steps.build-ffmpeg.outputs.commit }})
+          body: |
+            Automated static build of FFmpeg (`aac_improv2` branch).
 
-        ./configure \
-            --prefix="$HOME/ffmpeg-custom" \
-            --pkg-config-flags="--static" \
-            --enable-gpl \
-            --enable-libx264 \
-            --enable-libvpx \
-            --enable-libopus \
-            --enable-libdav1d \
-            --enable-libsoxr \
-            --disable-doc \
-            --disable-ffplay \
-            --disable-ffprobe \
-            --disable-shared \
-            --enable-static \
-            --extra-cflags="-static" \
-            --extra-ldflags="-static"
-
-        make -j$(nproc)
-        make install
-
-    - name: Verify Build
-      run: |
-        ~/ffmpeg-custom/bin/ffmpeg -h encoder=aac
-
-    - name: Tar and Compress Files
-      run: |
-        tar -czf ffmpeg-custom-linux-x86_64.tar.gz -C "$HOME" ffmpeg-custom
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: ffmpeg-custom-static
-        path: ffmpeg-custom-linux-x86_64.tar.gz
-
-    - name: Create GitHub Release & Upload Asset
-      if: inputs.release == true
-      uses: softprops/action-gh-release@v3
-      with:
-        tag_name: ffmpeg-${{ steps.build-ffmpeg.outputs.date }}-${{ steps.build-ffmpeg.outputs.commit }}
-        name: FFmpeg Custom Build (${{ steps.build-ffmpeg.outputs.commit }})
-        body: |
-          Automated static build of FFmpeg (`aac_improv2` branch).
-          - **Commit:** `${{ steps.build-ffmpeg.outputs.commit }}`
-          - **Date:** `${{ steps.build-ffmpeg.outputs.date }}`
-          - **Linked Libraries:** x264, vpx, opus, dav1d, soxr (Static)
-        files: ffmpeg-custom-linux-x86_64.tar.gz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - Commit: `${{ steps.build-ffmpeg.outputs.commit }}`
+            - Date: `${{ steps.build-ffmpeg.outputs.date }}`
+            - Libraries: x264, vpx, opus, dav1d, soxr
+          files: ffmpeg-custom-linux-x86_64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
