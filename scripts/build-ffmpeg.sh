@@ -69,6 +69,7 @@ DATE=$(git log -1 --format=%cd --date=format:%Y%m%d)
   --enable-static \
   --disable-shared \
   --enable-small \
+  --disable-debug \
   --disable-doc \
   --disable-ffplay \
   --disable-ffprobe \
@@ -84,6 +85,8 @@ DATE=$(git log -1 --format=%cd --date=format:%Y%m%d)
 
 make -j"$(nproc)"
 make install
+
+strip "$PREFIX/bin/ffmpeg"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
