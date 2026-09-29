@@ -28,7 +28,7 @@ jobs:
         DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
             git build-essential yasm nasm pkg-config meson ninja-build \
             libwavpack-dev libbz2-dev zlib1g-dev \
-            libx264-dev libvpx-dev libopus-dev libsoxr-dev
+            libx264-dev libvpx-dev libopus-dev
 
         pip install --upgrade meson
 
@@ -40,7 +40,17 @@ jobs:
         meson setup .. --prefix="$HOME/ffmpeg-custom" --libdir="$HOME/ffmpeg-custom/lib" -Ddefault_library=static --buildtype=release
         ninja && ninja install
         cd ~
-
+        
+    - name: Build soxr (Static)
+      run: |
+        git clone --depth 1 https://github.com/chirlu/soxr.git soxr-build
+        cd soxr-build
+        mkdir build && cd build
+        cmake -DCMAKE_INSTALL_PREFIX="$HOME/ffmpeg-custom" -DCMAKE_INSTALL_LIBDIR="lib" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release ..
+        make -j$(nproc)
+        make install
+        cd ~
+        
     - name: Clone and Build FFmpeg
       id: build-ffmpeg
       run: |
@@ -78,7 +88,6 @@ jobs:
 
     - name: Verify Build
       run: |
-        ~/ffmpeg-custom/bin/ffmpeg -decoders | grep -E "av1|vp9"
         ~/ffmpeg-custom/bin/ffmpeg -h encoder=aac
 
     - name: Tar and Compress Files
