@@ -86,13 +86,6 @@ jobs:
         with:
           tag_name: ${{ steps.commit.outputs.date }}-${{ steps.commit.outputs.commit }}
           name: FFmpeg Custom Build (${{ steps.build-ffmpeg.outputs.commit }})
-          body: |
-            Automated static build of FFmpeg (`aac_improv2`).
-
-            - Commit: `${{ steps.build-ffmpeg.outputs.commit }}`
-            - Date: `${{ steps.build-ffmpeg.outputs.date }}`
-            - Libraries: x264, vpx, opus, dav1d, soxr
-            - Build type: Static
           files: ffmpeg-custom-linux-x86_64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
