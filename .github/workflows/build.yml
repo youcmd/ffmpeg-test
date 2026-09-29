@@ -26,6 +26,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+      - name: Get commit info
+        id: commit
+        shell: bash
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
+      
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
 
       - name: Dependencies
         run: |
