@@ -20,31 +20,58 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout Repository
+        uses: actions/checkout@v7
 
-      - name: Install Dependencies
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update -qq
+
           sudo apt-get install -y --no-install-recommends \
-            git build-essential yasm nasm pkg-config \
-            meson ninja-build cmake \
-            libwavpack-dev libbz2-dev zlib1g-dev \
-            libx264-dev libvpx-dev libopus-dev
+            git \
+            build-essential \
+            yasm \
+            nasm \
+            pkg-config \
+            meson \
+            ninja-build \
+            cmake \
+            libwavpack-dev \
+            libbz2-dev \
+            zlib1g-dev \
+            libx264-dev \
+            libvpx-dev \
+            libopus-dev
+
           pip install --upgrade meson
 
       - name: Build FFmpeg
         id: build-ffmpeg
-        run: bash scripts/build-ffmpeg.sh
-
-      - name: Verify
         run: |
+          bash scripts/build-ffmpeg.sh
+
+      - name: Verify Build
+        run: |
+          echo "==> FFmpeg version"
           ~/ffmpeg-custom/bin/ffmpeg -version
+
+          echo
+          echo "==> AAC encoder"
           ~/ffmpeg-custom/bin/ffmpeg -h encoder=aac
 
-      - name: Archive
+          echo
+          echo "==> Binary information"
+          file ~/ffmpeg-custom/bin/ffmpeg
+
+          echo
+          echo "==> Dynamic dependencies"
+          ldd ~/ffmpeg-custom/bin/ffmpeg || true
+
+      - name: Create Archive
         run: |
           tar -czf ffmpeg-custom-linux-x86_64.tar.gz \
-            -C "$HOME" ffmpeg-custom
+            -C "$HOME" \
+            ffmpeg-custom
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -52,7 +79,7 @@ jobs:
           name: ffmpeg-custom-static
           path: ffmpeg-custom-linux-x86_64.tar.gz
 
-      - name: Release
+      - name: Create GitHub Release
         if: inputs.release == true
         uses: softprops/action-gh-release@v2
         with:
@@ -64,6 +91,7 @@ jobs:
             - Commit: `${{ steps.build-ffmpeg.outputs.commit }}`
             - Date: `${{ steps.build-ffmpeg.outputs.date }}`
             - Libraries: x264, vpx, opus, dav1d, soxr
+            - Build type: Static
           files: ffmpeg-custom-linux-x86_64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
