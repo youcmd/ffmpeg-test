@@ -1,0 +1,151 @@
+name: Build and Release FFmpeg Static
+
+on:
+  push:
+    branches: ["main", "master"]
+
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Create GitHub Release and upload assets"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.commit.outputs.commit }}
+      date: ${{ steps.commit.outputs.date }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Get commit info
+        id: commit
+        shell: bash
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
+
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux
+            name: linux-x86_64
+            cross: native
+
+          - target: windows
+            name: windows-x86_64
+            cross: x86_64-w64-mingw32
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+
+          sudo apt-get install -y --no-install-recommends \
+            git \
+            build-essential \
+            yasm \
+            nasm \
+            pkg-config \
+            meson \
+            ninja-build \
+            cmake \
+            autoconf \
+            automake \
+            libtool \
+            gettext \
+            mingw-w64
+
+          python3 -m pip install --user --upgrade meson
+
+      - name: Build
+        id: build-ffmpeg
+        shell: bash
+        run: |
+          bash scripts/build-ffmpeg.sh "${{ matrix.cross }}"
+
+      - name: Verify Linux
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          ~/ffmpeg-custom/bin/ffmpeg -version
+          ~/ffmpeg-custom/bin/ffmpeg -h encoder=aac
+          ~/ffmpeg-custom/bin/ffmpeg -filters | grep -i soxr || true
+
+          file ~/ffmpeg-custom/bin/ffmpeg
+          ldd ~/ffmpeg-custom/bin/ffmpeg || true
+
+      - name: Verify Windows
+        if: matrix.target == 'windows'
+        shell: bash
+        run: |
+          file ~/ffmpeg-custom/bin/ffmpeg.exe
+
+          ~/ffmpeg-custom/bin/ffmpeg.exe -version
+          ~/ffmpeg-custom/bin/ffmpeg.exe -h encoder=aac
+
+      - name: Archive
+        shell: bash
+        run: |
+          tar -czf \
+            ffmpeg-custom-${{ matrix.name }}.tar.gz \
+            -C "$HOME" \
+            ffmpeg-custom
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-custom-${{ matrix.name }}
+          path: ffmpeg-custom-${{ matrix.name }}.tar.gz
+
+  release:
+    needs: [prepare, build]
+    if: inputs.release == true
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ffmpeg-custom-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: |
+          find artifacts -maxdepth 2 -type f -print
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.date }}-${{ needs.prepare.outputs.commit }}
+          name: FFmpeg Custom Build (${{ needs.prepare.outputs.commit }})
+          files: |
+            artifacts/ffmpeg-custom-linux-x86_64.tar.gz
+            artifacts/ffmpeg-custom-windows-x86_64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
