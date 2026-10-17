@@ -140,7 +140,7 @@ jobs:
           find artifacts -maxdepth 2 -type f -print
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare.outputs.date }}-${{ needs.prepare.outputs.commit }}
           name: FFmpeg Custom Build (${{ needs.prepare.outputs.commit }})
