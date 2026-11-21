@@ -53,7 +53,7 @@ cd "$WORKDIR"
 
 # FFmpeg
 git clone \
-  --branch aac_improv2 \
+  --branch aac_ne3 \
   https://code.ffmpeg.org/Lynne/FFmpeg.git \
   ffmpeg
 
